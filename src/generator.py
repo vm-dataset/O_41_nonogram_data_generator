@@ -132,19 +132,6 @@ class TaskGenerator(BaseGenerator):
             show_solution: If True, show complete solution
             filled_cells: Optional set of (i, j) tuples for partially filled cells
         """
-        w, h = self.config.image_size
-        dpi = 150
-        fig, ax = plt.subplots(figsize=(w / dpi, h / dpi), dpi=dpi)
-        ax.set_xlim(0, w)
-        ax.set_ylim(0, h)
-        ax.set_aspect("equal")
-        ax.axis("off")
-        ax.invert_yaxis()
-        
-        # Draw background
-        bg = Rectangle((0, 0), w, h, facecolor=BACKGROUND_COLOR, edgecolor="none")
-        ax.add_patch(bg)
-        
         size = pattern.grid_size
         cell_size = self.cell_size
         
@@ -159,6 +146,28 @@ class TaskGenerator(BaseGenerator):
         # Position grid (centered, with hints outside)
         grid_start_x = row_hint_width + 20
         grid_start_y = col_hint_height + 20
+        
+        # Calculate required dimensions to ensure complete table
+        grid_width = size * cell_size
+        grid_height = size * cell_size
+        required_width = grid_start_x + grid_width + 20  # Right margin
+        required_height = grid_start_y + grid_height + 20  # Bottom margin
+        
+        # Use required dimensions or config size, whichever is larger
+        base_w, base_h = self.config.image_size
+        w = max(required_width, base_w)
+        h = max(required_height, base_h)
+        
+        dpi = 150
+        fig, ax = plt.subplots(figsize=(w / dpi, h / dpi), dpi=dpi)
+        ax.set_xlim(0, w)
+        ax.set_ylim(0, h)
+        ax.axis("off")
+        ax.invert_yaxis()
+        
+        # Draw background
+        bg = Rectangle((0, 0), w, h, facecolor=BACKGROUND_COLOR, edgecolor="none")
+        ax.add_patch(bg)
         
         # Draw column hints (above grid)
         for j in range(size):
@@ -200,12 +209,26 @@ class TaskGenerator(BaseGenerator):
                                    facecolor=FILL_COLOR, edgecolor="none")
                     ax.add_patch(fill)
         
-        # Convert to PIL Image
+        # Convert to PIL Image - save with exact dimensions to ensure complete table
+        # Use tight bbox with sufficient padding, then ensure final size meets requirements
         buf = io.BytesIO()
-        fig.savefig(buf, dpi=dpi, bbox_inches="tight", pad_inches=0.01, format='png')
+        fig.savefig(buf, dpi=dpi, format='png', facecolor=BACKGROUND_COLOR,
+                   bbox_inches="tight", pad_inches=0.2)
         buf.seek(0)
         img = Image.open(buf).convert('RGB')
         plt.close(fig)
+        
+        # Ensure image has at least the required dimensions for complete table display
+        img_width, img_height = img.size
+        final_width = max(int(required_width), img_width)
+        final_height = max(int(required_height), img_height)
+        
+        if img_width < final_width or img_height < final_height:
+            # Create a new image with the required dimensions
+            new_img = Image.new('RGB', (final_width, final_height), BACKGROUND_COLOR)
+            # Paste the original image at the top-left corner
+            new_img.paste(img, (0, 0))
+            img = new_img
         
         return img
     
